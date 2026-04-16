@@ -20345,7 +20345,7 @@ window.SKAI_META = <?php
 $__isDailyDigit      = ($__domain > 0 && $__domain <= 9 && !$__hasExtra) || !empty($lotteryConfig['is_daily']) || !empty($lotteryConfig['isDaily']);
 $__isStandardLottery = ($__domain > 9);
 $__isDailySingleValue = ($__pick === 1 && !$__hasExtra && ($__isCashPopFamily || $__mainCountRaw === 1 || $__isDailyDigit));
-$__predictionMode    = $__isDailyDigit ? 'daily_digit' : 'standard_lottery';
+$__predictionMode    = ($__isDailySingleValue || $__isDailyDigit) ? 'daily_digit' : 'standard_lottery';
 $__extraCount        = $__hasExtra ? (int)($lotteryConfig['num_extra_balls_drawn'] ?? $lotteryConfig['extra_ball_count'] ?? 1) : 0;
 echo json_encode([
   'domain'                => $__domain,
@@ -24147,7 +24147,7 @@ window.SKAI_META = {
   ?>,
   isStandardLotteryGame: <?php echo ($mainMax > 9) ? 'true' : 'false'; ?>,
   gameFamily: <?php echo json_encode(strtolower(trim((string)($lotteryConfig['game_family'] ?? $lotteryConfig['gameFamily'] ?? ''))), JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>,
-  predictionMode: <?php echo json_encode((($mainMax > 0 && $mainMax <= 9 && !$hasExtra) || !empty($lotteryConfig['is_daily']) || !empty($lotteryConfig['isDaily'])) ? 'daily_digit' : 'standard_lottery', JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>
+  predictionMode: <?php echo json_encode(($___singleDaily || ($mainMax > 0 && $mainMax <= 9 && !$hasExtra) || !empty($lotteryConfig['is_daily']) || !empty($lotteryConfig['isDaily'])) ? 'daily_digit' : 'standard_lottery', JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>
 };
 
 // Client-side history arrays used by buildSkaiDataset()
@@ -40539,7 +40539,7 @@ var limit = (typeof window.SKAI_getTopLimit === 'function') ? window.SKAI_getTop
 if (!limit || limit < 1) { limit = 20; }
 
 // Use JSON config to determine game type: daily digit games vs regular lotteries
-var isDailyGame = !!(meta && (meta.isDaily || meta.isDailyDigitGame));
+var isDailyGame = !!(meta && (meta.isDaily || meta.isDailyDigitGame || meta.isDailySingleValueGame));
 var hasExtra = !!meta.hasExtraBall;
 
 var top = [];
@@ -43851,7 +43851,7 @@ window.addEventListener('skai:render:done', function(){
     // isDailyDigitGame=true even when the JSON config omits the "is_daily" key, so
     // checking only meta.isDaily would skip the panel and leave SKAI_DAILY_CHOSEN_COMBOS
     // empty, causing the batch save to store only the primary combo instead of all 5.
-    var isDaily = !!(meta && (meta.isDaily || meta.isDailyDigitGame));
+    var isDaily = !!(meta && (meta.isDaily || meta.isDailyDigitGame || meta.isDailySingleValueGame));
 
     var panel = document.getElementById('skai-daily-panel');
     if (!panel) return;
@@ -43939,11 +43939,12 @@ window.addEventListener('skai:render:done', function(){
     function normTopScores(arr){
       var out = [];
       var sum = 0;
+      var _maxNum = (meta && isFinite(+meta.mainMax) && +meta.mainMax > 0) ? (+meta.mainMax|0) : 9;
       for (var i=0; i<arr.length; i++){
         var it = arr[i] || {};
         var num = (it.num != null) ? +it.num : +it;
         var sc  = (it.score != null) ? +it.score : 0;
-        if (!isFinite(num) || num < 0 || num > 9) continue;
+        if (!isFinite(num) || num < 0 || num > _maxNum) continue;
         if (!isFinite(sc) || sc < 0) sc = 0;
         out.push({ num:num, score:sc });
         sum += sc;
