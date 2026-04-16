@@ -8758,13 +8758,27 @@ try {
             || !empty($lotteryConfig['max_extra_ball_number'])
             || !empty($lotteryConfig['num_extra_balls_drawn'])
             || !empty($lotteryConfig['extra_ball_count']);
+        $cfgPickResolved = (int)($cfgPick ?: $pickLengthPosted ?: 0);
+        $isDailySingleValuePosted = ($cfgPickResolved === 1 && !$cfgHasExtra);
+        $skaiParseDailyDisplayDigits = static function($display, $pickLen, $singleValueMode): array {
+            $digits = preg_replace('/[^0-9]/', '', (string)$display);
+            if ($digits === '') { return []; }
+            if ($singleValueMode || (int)$pickLen === 1) {
+                return [(int)$digits];
+            }
+            $out = [];
+            for ($i = 0; $i < strlen($digits); $i++) {
+                $out[] = (int)$digits[$i];
+            }
+            return $out;
+        };
         if (!empty($dailyTopCombsStr)) {
             $isDailyGamePosted = true;
         } elseif (!empty($lotteryConfig['is_daily']) || !empty($lotteryConfig['isDaily'])) {
             $isDailyGamePosted = true;
         } elseif ($cfgPick >= 2 && $cfgPick <= 5 && $cfgMainMax > 0 && $cfgMainMax <= 9 && !$cfgHasExtra) {
             $isDailyGamePosted = true;
-        } elseif ($pickLengthPosted >= 2 && $pickLengthPosted <= 5 && !$cfgHasExtra) {
+        } elseif ($pickLengthPosted >= 1 && $pickLengthPosted <= 5 && !$cfgHasExtra) {
             // pick_length alone cannot confirm a daily game: standard pick-5 lotteries
             // (Powerball, Mega Millions, EuroMillions) also post pick_length = 5.
             // Guard: if the evidence payload explicitly identifies this as a standard lottery
@@ -8980,9 +8994,7 @@ $labelInput = implode(' - ', $parts);
                 }
                 if (!empty($dailyStrings)) {
                     $firstDailyDisplay = (string)$dailyStrings[0];
-                    if ($firstDailyDisplay !== '' && preg_match_all('/\d/', $firstDailyDisplay, $dmFirstStrings)) {
-                        $mainArr = array_map('intval', $dmFirstStrings[0]);
-                    }
+                    $mainArr = $skaiParseDailyDisplayDigits($firstDailyDisplay, $cfgPickResolved, $isDailySingleValuePosted);
                 } else {
                     $firstDaily = $dailySeed[0];
                     if (!empty($firstDaily['combo']) && is_array($firstDaily['combo'])) {
@@ -8991,9 +9003,7 @@ $labelInput = implode(' - ', $parts);
                         $mainArr = array_map('intval', $firstDaily['main']);
                     } else {
                         $dispFirst = (string) ($firstDaily['display'] ?? $firstDaily['values'] ?? '');
-                        if ($dispFirst !== '' && preg_match_all('/\d/', $dispFirst, $dmFirst)) {
-                            $mainArr = array_map('intval', $dmFirst[0]);
-                        }
+                        $mainArr = $skaiParseDailyDisplayDigits($dispFirst, $cfgPickResolved, $isDailySingleValuePosted);
                     }
                 }
             }
@@ -9046,7 +9056,7 @@ $labelInput = implode(' - ', $parts);
                     if (!is_array($nums)) { $nums = []; }
                     $nums['daily_top_combo_strings'] = $__recoveredDisplays;
                     // Set $mainArr from first combo digits for downstream range checks
-                    $mainArr = array_map('intval', str_split((string)$__recoveredDisplays[0]));
+                    $mainArr = $skaiParseDailyDisplayDigits((string)$__recoveredDisplays[0], $cfgPickResolved, $isDailySingleValuePosted);
                     skai_debug_log('[SKAI SAVE TRACE] main_numbers_recovered_from_evidence=1 display=' . (string)$__recoveredDisplays[0]);
                 }
             } elseif (!$isDailyGamePosted && !empty($evidenceDecoded['final_prediction_sets']) && is_array($evidenceDecoded['final_prediction_sets'])) {
@@ -9875,7 +9885,9 @@ if (strpos($__lNameForType, 'powerball') !== false) {
     $__predType = 'euromillions';
 } elseif ($isDailyGamePosted) {
     $__ps = (int)($cfgPick ?: ($pickLength ?? 0) ?: count($mainArr));
-    if ($__ps === 3) { $__predType = 'pick3'; }
+    if ($__ps === 1) { $__predType = 'cash_pop'; }
+    elseif ($__ps === 2) { $__predType = 'pick2'; }
+    elseif ($__ps === 3) { $__predType = 'pick3'; }
     elseif ($__ps === 4) { $__predType = 'pick4'; }
     elseif ($__ps === 5) { $__predType = 'pick5'; }
     else { $__predType = 'daily'; }
@@ -9909,8 +9921,8 @@ if ($isDailyGamePosted) {
     if (is_array($evidenceDecoded) && !empty($evidenceDecoded['daily_primary_combo_digits']) && is_array($evidenceDecoded['daily_primary_combo_digits'])) {
         $__dailyPrimPredDigits = json_encode(array_values(array_map('intval', $evidenceDecoded['daily_primary_combo_digits'])), JSON_UNESCAPED_SLASHES);
     } elseif (!empty($__dailyPrimPredRow)) {
-        preg_match_all('/\d/', (string)$__dailyPrimPredRow, $__dm);
-        $__dailyPrimPredDigits = !empty($__dm[0]) ? json_encode(array_map('intval', $__dm[0]), JSON_UNESCAPED_SLASHES) : null;
+        $__dailyPrimDigits = $skaiParseDailyDisplayDigits((string)$__dailyPrimPredRow, (int)$__dailyPickSizeRow, ((int)$__dailyPickSizeRow === 1));
+        $__dailyPrimPredDigits = !empty($__dailyPrimDigits) ? json_encode(array_values(array_map('intval', $__dailyPrimDigits)), JSON_UNESCAPED_SLASHES) : null;
     }
 
     // Top picks (combo display strings, JSON array)
@@ -19692,7 +19704,7 @@ SKAI is set to: Balanced profile - Balanced Mix strategy - Balanced Mix 55%
     </div>
 
     <div class="skai-daily-card">
-      <div class="skai-daily-card-h" id="skai-daily-combos-title">Top 5 Pick 3 Most Probable Combinations</div>
+      <div class="skai-daily-card-h" id="skai-daily-combos-title">Top 5 Most Probable Combinations</div>
       <div id="skai-daily-combos" class="skai-daily-combos"></div>
       <div class="skai-daily-foot">"Straight" means exact order. Bonus digits shown below are saved with this daily run.</div>
     </div>
@@ -20099,6 +20111,9 @@ $__extraDomain = (int)($lotteryConfig['max_extra_ball_number'] ?? $lotteryConfig
 // which checks both has_extra_ball flag AND that columns exist. Fall back to config check if not yet set.
 $__hasExtra    = isset($hasExtra) ? (bool)$hasExtra : !empty($lotteryConfig['has_extra_ball']);
 $__allowZero   = ($__domain > 0 && $__domain <= 9) && !$__hasExtra;
+$__gameFamilyRaw = strtolower(trim((string)($lotteryConfig['game_family'] ?? $lotteryConfig['gameFamily'] ?? '')));
+$__isCashPopFamily = (strpos($__gameFamilyRaw, 'cash pop') !== false) || (strpos($__gameFamilyRaw, 'cash_pop') !== false) || (strpos($__gameFamilyRaw, 'cashpop') !== false);
+$__mainCountRaw = (int)($lotteryConfig['main_count'] ?? $lotteryConfig['mainCount'] ?? $__pick);
 
 /**
  * Whether the extra ball should be treated as strictly 1-based on the client.
@@ -20111,6 +20126,7 @@ $__forceOneBasedExtra = array_key_exists('extra_one_based', $lotteryConfig)
 window.SKAI_META = <?php
 $__isDailyDigit      = ($__domain > 0 && $__domain <= 9 && !$__hasExtra) || !empty($lotteryConfig['is_daily']) || !empty($lotteryConfig['isDaily']);
 $__isStandardLottery = ($__domain > 9);
+$__isDailySingleValue = ($__pick === 1 && !$__hasExtra && ($__isCashPopFamily || $__mainCountRaw === 1 || $__isDailyDigit));
 $__predictionMode    = $__isDailyDigit ? 'daily_digit' : 'standard_lottery';
 $__extraCount        = $__hasExtra ? (int)($lotteryConfig['num_extra_balls_drawn'] ?? $lotteryConfig['extra_ball_count'] ?? 1) : 0;
 echo json_encode([
@@ -20126,7 +20142,9 @@ echo json_encode([
   'forceOneBasedExtra'    => (bool)$__forceOneBasedExtra,
   'isDaily'               => !empty($lotteryConfig['is_daily']) || !empty($lotteryConfig['isDaily']),
   'isDailyDigitGame'      => (bool)$__isDailyDigit,
+  'isDailySingleValueGame'=> (bool)$__isDailySingleValue,
   'isStandardLotteryGame' => (bool)$__isStandardLottery,
+  'gameFamily'            => (string)$__gameFamilyRaw,
   'predictionMode'        => $__predictionMode
 ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
 ?>;
@@ -22744,8 +22762,16 @@ unset($__skaiFlags, $__skaiGameId, $__skaiUserId, $__skaiCsrfToken, $__skaiEndpo
   if (typeof window.SKAI_formatDailyComboDisplay !== 'function') {
     window.SKAI_formatDailyComboDisplay = function(combo, pickLen){
       var out = '';
-      var i, v, s, digits;
+      var i, v, s, digits, meta, isSingleValueGame;
+      meta = window.SKAI_META || {};
+      isSingleValueGame = !!(meta && (meta.isDailySingleValueGame || (meta.isDailyDigitGame && ((+meta.pick|0) === 1))));
       if (Array.isArray(combo)) {
+        if (isSingleValueGame && combo.length) {
+          v = combo[0];
+          if (v == null || v === '') return '';
+          s = String(v).replace(/[^0-9]/g, '');
+          return s;
+        }
         for (i = 0; i < combo.length; i++) {
           v = combo[i];
           if (v == null || v === '') continue;
@@ -22757,6 +22783,7 @@ unset($__skaiFlags, $__skaiGameId, $__skaiUserId, $__skaiCsrfToken, $__skaiEndpo
       }
       if (combo == null) return '';
       digits = String(combo).replace(/[^0-9]/g, '');
+      if (isSingleValueGame) { return digits; }
       if (pickLen && digits && digits.length < pickLen) { while (digits.length < pickLen) digits = '0' + digits; }
       return digits;
     };
@@ -22765,9 +22792,15 @@ unset($__skaiFlags, $__skaiGameId, $__skaiUserId, $__skaiCsrfToken, $__skaiEndpo
     window.SKAI_dailyDigitsFromDisplay = function(combo, pickLen){
       var disp = '';
       var out = [];
-      var i;
+      var i, meta, isSingleValueGame;
       try { disp = window.SKAI_formatDailyComboDisplay(combo, pickLen || 0); } catch(_) { disp = ''; }
       disp = String(disp || '').replace(/[^0-9]/g, '');
+      meta = window.SKAI_META || {};
+      isSingleValueGame = !!(meta && (meta.isDailySingleValueGame || (meta.isDailyDigitGame && ((+meta.pick|0) === 1)) || ((pickLen|0) === 1)));
+      if (isSingleValueGame) {
+        if (disp === '') return [];
+        return [parseInt(disp, 10)];
+      }
       if ((pickLen|0) > 0 && disp.length < (pickLen|0)) { while (disp.length < (pickLen|0)) disp = '0' + disp; }
       for (i = 0; i < disp.length; i++) { out.push(parseInt(disp.charAt(i), 10)); }
       return out;
@@ -22870,8 +22903,16 @@ function buildPayload(){
     if (typeof window.SKAI_formatDailyComboDisplay !== 'function') {
       window.SKAI_formatDailyComboDisplay = function(combo, pickLen){
         var out = '';
-        var i, v, s, digits;
+        var i, v, s, digits, meta, isSingleValueGame;
+        meta = window.SKAI_META || {};
+        isSingleValueGame = !!(meta && (meta.isDailySingleValueGame || (meta.isDailyDigitGame && ((+meta.pick|0) === 1))));
         if (Array.isArray(combo)) {
+          if (isSingleValueGame && combo.length) {
+            v = combo[0];
+            if (v == null || v === '') return '';
+            s = String(v).replace(/[^0-9]/g, '');
+            return s;
+          }
           for (i = 0; i < combo.length; i++) {
             v = combo[i];
             if (v == null || v === '') continue;
@@ -22883,6 +22924,7 @@ function buildPayload(){
         }
         if (combo == null) return '';
         digits = String(combo).replace(/[^0-9]/g, '');
+        if (isSingleValueGame) { return digits; }
         if (pickLen && digits && digits.length < pickLen) { while (digits.length < pickLen) digits = '0' + digits; }
         return digits;
       };
@@ -23878,7 +23920,15 @@ window.SKAI_META = {
   extraLabel: <?php echo json_encode((string)($lotteryConfig['extra_ball_label'] ?? 'Extra Ball'), JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>,
   isDaily: <?php echo (!empty($lotteryConfig['is_daily']) || !empty($lotteryConfig['isDaily'])) ? 'true' : 'false'; ?>, // daily digit game flag from JSON config
   isDailyDigitGame: <?php echo (($mainMax > 0 && $mainMax <= 9 && !$hasExtra) || !empty($lotteryConfig['is_daily']) || !empty($lotteryConfig['isDaily'])) ? 'true' : 'false'; ?>,
+  isDailySingleValueGame: <?php
+    $___gf = strtolower(trim((string)($lotteryConfig['game_family'] ?? $lotteryConfig['gameFamily'] ?? '')));
+    $___cashPop = (strpos($___gf, 'cash pop') !== false) || (strpos($___gf, 'cash_pop') !== false) || (strpos($___gf, 'cashpop') !== false);
+    $___mainCount = (int)($lotteryConfig['main_count'] ?? $lotteryConfig['mainCount'] ?? $pickSize);
+    $___singleDaily = ($pickSize === 1 && !$hasExtra && ($___cashPop || $___mainCount === 1 || !empty($lotteryConfig['is_daily']) || !empty($lotteryConfig['isDaily'])));
+    echo $___singleDaily ? 'true' : 'false';
+  ?>,
   isStandardLotteryGame: <?php echo ($mainMax > 9) ? 'true' : 'false'; ?>,
+  gameFamily: <?php echo json_encode(strtolower(trim((string)($lotteryConfig['game_family'] ?? $lotteryConfig['gameFamily'] ?? ''))), JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>,
   predictionMode: <?php echo json_encode((($mainMax > 0 && $mainMax <= 9 && !$hasExtra) || !empty($lotteryConfig['is_daily']) || !empty($lotteryConfig['isDaily'])) ? 'daily_digit' : 'standard_lottery', JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT); ?>
 };
 
@@ -43593,15 +43643,15 @@ window.addEventListener('skai:render:done', function(){
       return;
     }
 
-    // Determine pick size (Pick 3 / Pick 4 / Pick 5) from meta if available, else infer by rendered pills count
+    // Determine pick size from meta if available, else infer by rendered pills count
     var pickSize = (meta && meta.pickMain != null) ? (+meta.pickMain|0) : 0;
     if (!(pickSize > 0)) pickSize = (meta && meta.pickSize != null) ? (+meta.pickSize|0) : 0;
     if (!(pickSize > 0)) {
       var pills = document.querySelectorAll('.skai-ai-main .nball, #aiPredictedNumbers .nball');
       pickSize = (pills && pills.length) ? pills.length : 3;
     }
-    if (pickSize < 3) pickSize = 3;
-    if (pickSize > 5) pickSize = 5; // daily digit games support Pick 3, Pick 4, Pick 5
+    if (pickSize < 1) pickSize = 1;
+    if (pickSize > 5) pickSize = 5; // daily games support Pick 1 through Pick 5 in this panel
 
     // Update panel title and combos card title to reflect actual pick size
     var _panelTitle = document.getElementById('skai-daily-panel-title');
@@ -51398,7 +51448,9 @@ document.addEventListener('DOMContentLoaded', function () {
       if (!_dcPrimary.length && r.mainNumbers && r.mainNumbers.length) {
         var _dcSrc = Array.isArray(r.mainNumbers[0]) ? r.mainNumbers[0] : r.mainNumbers;
         _dcPrimary = (typeof _dcSrc[0] === 'string')
-          ? _dcSrc[0].replace(/[^0-9]/g, '').split('').map(function(d){ return parseInt(d,10); })
+          ? ((typeof window.SKAI_dailyDigitsFromDisplay === 'function')
+            ? window.SKAI_dailyDigitsFromDisplay(_dcSrc[0], ((window.SKAI_META && +window.SKAI_META.pick) || 0))
+            : _dcSrc[0].replace(/[^0-9]/g, '').split('').map(function(d){ return parseInt(d,10); }))
           : normalizeNumericArray(_dcSrc);
       }
       // [FIX-BATCH-DAILY-SAVE] If r.dailyChosenCombos was empty, _dailyStrings was not
