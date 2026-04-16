@@ -42218,7 +42218,7 @@ try {
       // Daily digit games must save the single primary combo, not the ranked digit ladder.
       // skaiSaveMainOrdered is useful for standard lotteries, but for Pick 3/4/5 it can
       // represent the top digit ranking (for example 6,7,8,9) rather than the chosen combo.
-      var _isDailyPrimary = !!(window.SKAI_META && (window.SKAI_META.isDaily || window.SKAI_META.isDailyDigitGame));
+      var _isDailyPrimary = !!(window.SKAI_META && (window.SKAI_META.isDaily || window.SKAI_META.isDailyDigitGame || window.SKAI_META.isDailySingleValueGame));
       var mainsArr = [];
       if (_isDailyPrimary && window.SKAI_DAILY_CHOSEN_COMBOS && window.SKAI_DAILY_CHOSEN_COMBOS.length) {
         var _primaryDailyCombo = Array.isArray(window.SKAI_DAILY_CHOSEN_COMBOS[0].combo)
@@ -42303,7 +42303,7 @@ try {
       var skaiRecoverRankedPayload = function(formEl, currentMains, currentExtras) {
         var payload = null;
         var meta = window.SKAI_META || {};
-        var isDailyRuntime = !!(meta.isDaily || meta.isDailyDigitGame);
+        var isDailyRuntime = !!(meta.isDaily || meta.isDailyDigitGame || meta.isDailySingleValueGame);
         var pickLen = parseInt(meta.pick || currentMains.length || 0, 10) || currentMains.length || 0;
         var mkDisplay = function(arr) {
           var out = [];
@@ -42487,11 +42487,11 @@ try {
       // Does NOT affect standard lottery saves.
       try {
         var _dtcMeta = window.SKAI_META || {};
-        var _isDailyForSave = !!(_dtcMeta.isDailyDigitGame);
+        var _isDailyForSave = !!(_dtcMeta.isDailyDigitGame || _dtcMeta.isDailySingleValueGame);
         if (!_isDailyForSave) {
           var _dtcPkFld = form.querySelector('input[name="pick_length"]');
           var _dtcPkVal = _dtcPkFld ? parseInt(_dtcPkFld.value, 10) : 0;
-          _isDailyForSave = (_dtcPkVal >= 2 && _dtcPkVal <= 5);
+          _isDailyForSave = (_dtcPkVal >= 1 && _dtcPkVal <= 5);
         }
         if (_isDailyForSave && window.SKAI_DAILY_CHOSEN_COMBOS && window.SKAI_DAILY_CHOSEN_COMBOS.length) {
           var _dtcArr = [];
@@ -50027,7 +50027,7 @@ document.addEventListener('DOMContentLoaded', function () {
   window._skaiPopulateFormFields = function(form) {
     if (!form) { return; }
     var _meta    = window.SKAI_META || {};
-    var _isDaily = !!(_meta.isDailyDigitGame || _meta.isDaily) && !_meta.isStandardLotteryGame;
+    var _isDaily = !!(_meta.isDailyDigitGame || _meta.isDaily || _meta.isDailySingleValueGame) && !(_meta.isStandardLotteryGame && !_meta.isDailySingleValueGame);
     var _pick    = parseInt(_meta.pick || _meta.pickSize || _meta.pickMain || 0, 10) || 0;
 
     // Only write to a field when it is currently empty / unpopulated to avoid stomping over
